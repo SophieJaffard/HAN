@@ -54,7 +54,7 @@ def Poisson(freq, T, shape):
     Simulates a Poisson process over a time `T` and intensity `freq`.
     Returns a numpy array representing the Poisson process.
     """
-    dt = T/N
+    dt = T/shape[-1]
     proc = stats.bernoulli.rvs(freq*dt, size=shape)
     return proc
 
