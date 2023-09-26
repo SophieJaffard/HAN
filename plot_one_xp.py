@@ -3,13 +3,21 @@ import numpy as np
 import scipy.stats as stats
 from hansolo import *
 
-nb=0
+nb = 0
 
 fig, axs = plt.subplots(3, 3, sharex=True, sharey=True)
 
-titles = ["Blue circle", "Blue square", "Blue triangle",
-          "Red circle", "Red square", "Red triangle",
-          "Gray circle", "Gray square", "Gray triangle"]
+titles = [
+    "Blue circle",
+    "Blue square",
+    "Blue triangle",
+    "Red circle",
+    "Red square",
+    "Red triangle",
+    "Gray circle",
+    "Gray square",
+    "Gray triangle",
+]
 
 for i in range(3):
     for j in range(3):
@@ -23,6 +31,6 @@ axs[2, 1].set_xlabel("m")
 
 plt.legend()
 fig.tight_layout()
-#plt.savefig('fr_AB.pdf')
+# plt.savefig('fr_AB.pdf')
 plt.show()
-#print(obj_tot)
+# print(obj_tot)
