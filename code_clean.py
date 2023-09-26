@@ -87,15 +87,7 @@ def in_A(objet):  # everything except the blue circle
 #             return i
 #         somme += p[i+1]
 #     return n-1
-def simu_dist(p):
-    """
-    Simulates a discrete probability distribution given by the vector `p`.
-    Returns an index based on the cumulative probabilities.
-    """
-    u = stats.uniform.rvs(0, 1)
-    cumulative_pb = np.cumsum(p)
-    return np.searchsorted(cumulative_pb, u)
-def simu_dist_vectorized(p, size=1):
+def simu_dist(p, size=1):
     """
     Vectorized version of simu_dist to generate multiple indices at once.
     """
@@ -150,7 +142,7 @@ def Hawkes_lin(V, W):
     """
     n = V.shape[1]  # nb of points
     H = np.zeros(n)  # contain points
-    ind_v = simu_dist_vectorized(W, n)
+    ind_v = simu_dist(W, n)
     H = V[ind_v, np.arange(n)]
     return H
 
@@ -264,9 +256,9 @@ F_output=np.zeros((K_output, M,Nb)) #firing rate output neurons
 #para_PWA=2*np.log(K_input) para opti PWA for regret
 para_PWA=2
 
-
-for o in obj:
-    activity.append(o+[1-l for l in o]) #index of active neurons for each object
+## SV: use list comprehension
+#index of active neurons for each object
+activity = [o+[1-l for l in o] for o in obj]
 
 
 for nb in range(Nb):
@@ -297,33 +289,32 @@ for nb in range(Nb):
                 else:
                     input_neurons[i,:]=Poisson(freq2,N,T)
 
-   
         #simulation of the output neurons
         output_neurons=np.zeros((K_output,N))
         for i in range(K_output):
             output_neurons[i,:]= Hawkes_lin(input_neurons,W_output[i,:,m,nb])
-
-        #output_neurons=np.zeros((K_output,N))
-        #for j in range(K_output):
-        #    for t in range(N):
-         #       output_neurons[j,t]= stats.bernoulli.rvs(np.sum(W_output[j,:,m,nb]*input_neurons[:,t]))
-    
     
         #firing rates
-        for i in range(K_input):
-            F_input[i,m]=np.sum(input_neurons[i,:])/T 
+        ## SV: vectorize
+        # for i in range(K_input):
+        #     F_input[i,m]=np.sum(input_neurons[i,:])/T 
+        F_input[:, m] = np.sum(input_neurons, axis=1) / T
     
-        for i in range(K_output):
-            F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
+        ## SV: vectorize
+        # for i in range(K_output):
+        #     F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
+        F_output[:, m, nb] = np.sum(output_neurons, axis=1) / T
         
         if (in_A(obj_cur) and F_output[0,m,nb] > F_output[1,m,nb]) or (in_B(obj_cur) and F_output[1,m,nb] > F_output[0,m,nb]):
             answers[nb,m]=1
     
         cred=cred_output_HAN_Solo(K_output, K_input, F_input[:,m], dt,obj_cur)
-        for j in range(K_output):
-            cred_cum_input[j,:]+=cred[j,:]
-            cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]* cred[j,:])
-        
+        ## SV: vectorize
+        # for j in range(K_output):
+        #     cred_cum_input[j,:]+=cred[j,:]
+        #     cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]* cred[j,:])
+        cred_cum_input += cred
+        cred_cum_output += np.sum(W_output[:, :, m, nb] * cred, axis=1)
 
         if m<M-1 :
             W_output_not_renorm[:,:,m+1]=EWA(W_output_not_renorm[:,:,m],eta_output,cred,K_output)
@@ -354,7 +345,7 @@ T=N*dt
 freq=100 #firing rate input neurons +
 freq2=150
 
-alpha=[100*dt,0] #spontaneous rates of output neurons
+alpha=np.array([100*dt,0]) #spontaneous rates of output neurons
 
 p=freq*dt #spiking proba input neurons
 p2=freq2*dt
@@ -409,33 +400,43 @@ for nb in range(Nb):
                input_neurons[i,:]=Poisson(freq,N,T)
                 
         #simulation of the output neurons
-        output_neurons=np.zeros((K_output,N))
-        for j in range(K_output):
-            for t in range(N):
-                output_neurons[j,t]= stats.bernoulli.rvs(np.minimum(np.maximum(0,alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t])),1))
+        # output_neurons=np.zeros((K_output,N))
+        # for j in range(K_output):
+        #     for t in range(N):
+        #         ## SV: you should use np.clip, it's faster
+        #         # output_neurons[j,t]= stats.bernoulli.rvs(np.minimum(np.maximum(0,alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t])),1))
+        #         output_neurons[j,t]= stats.bernoulli.rvs(np.clip(alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t]),0,1))
+        probas = alpha[:, np.newaxis] + np.sum((W_output[:, :n_input, m, nb][:, :, np.newaxis] - W_output[:, n_input:, m, nb][:, :, np.newaxis]) * input_neurons, axis=1)
+        clipped_probabs = np.clip(probas, 0, 1)
+        output_neurons = stats.bernoulli.rvs(clipped_probabs)
     
         #firing rates
-        for i in range(n_input):
-            F_input[i,m]=np.sum(input_neurons[i,:])/T 
+        # for i in range(n_input):
+        #     F_input[i,m]=np.sum(input_neurons[i,:])/T 
     
-        for i in range(K_output):
-            F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
+        # for i in range(K_output):
+        #     F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
+        F_input[:, m] = np.sum(input_neurons, axis=1) / T
+        F_output[:, m, nb] = np.sum(output_neurons, axis=1) / T
         
         if (in_A(obj_cur) and F_output[0,m,nb] > F_output[1,m,nb]) or (in_B(obj_cur) and F_output[1,m,nb] > F_output[0,m,nb]):
             answers[nb,m]=1
     
         cred=cred_output_HAN(K_output, K_input, F_input[:,m], dt,obj_cur)
-        for j in range(K_output):
-            cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]*cred[j,:])
-            cred_cum_input[j,:]+=cred[j,:]
+        # for j in range(K_output):
+        #     cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]*cred[j,:])
+        #     cred_cum_input[j,:]+=cred[j,:]
+        cred_cum_output += np.sum(W_output[:, :, m, nb] * cred, axis=1)
+        cred_cum_input += cred
 
         if m<M-1 :
             W_output_not_renorm[:,:,m+1]=EWA(W_output_not_renorm[:,:,m],eta_output,cred,K_output)
             #W_output_not_renorm[:,:,m+1]=Multilin(W_output_not_renorm[:,:,m],eta_output,list_cred_output[:,:,m],K_output)
             #W_output_not_renorm[:,:,m+1]=PWA(para_PWA,K_output,K_input,cred_cum_output,cred_cum_input)
 
-            for j in range(K_output):
-                W_output[j,:,m+1,nb]=W_output_not_renorm[j,:,m+1]/np.sum(W_output_not_renorm[j,:,m+1])
+            # for j in range(K_output):
+            #     W_output[j,:,m+1,nb]=W_output_not_renorm[j,:,m+1]/np.sum(W_output_not_renorm[j,:,m+1])
+            W_output[:, :, m+1, nb] = W_output_not_renorm[:, :, m+1] / np.sum(W_output_not_renorm[:, :, m+1], axis=1)[:, np.newaxis]
 
         if m%100==0:
             print(nb,m)
