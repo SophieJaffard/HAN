@@ -853,5 +853,5 @@ plt.ylabel('Proportion of correction classifications')
 plt.xlabel('m')
 
 plt.legend()
-plt.savefig('curves.pdf')
+#plt.savefig('curves.pdf')
 plt.show()
