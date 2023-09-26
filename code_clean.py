@@ -104,13 +104,13 @@ def simu_dist(p, size=1):
 #     for i in range(N):
 #         P[i] = stats.bernoulli.rvs(freq*dt)
 #     return P
-def Poisson(freq, N, T):
+def Poisson(freq, T, shape):
     """
-    Simulates a Poisson process over a time `T` with `N` steps and intensity `freq`.
+    Simulates a Poisson process over a time `T` and intensity `freq`.
     Returns a numpy array representing the Poisson process.
     """
     dt = T/N
-    proc = stats.bernoulli.rvs(freq*dt, size=N)
+    proc = stats.bernoulli.rvs(freq*dt, size=shape)
     return proc
 
 ## SV: dont use np.size, use V.shape instead
@@ -281,15 +281,22 @@ for nb in range(Nb):
         obj_cur=activity_cur[:int(K_input/2)] #current object
 
         #simulation of the input neurons
+        ## SV: let's vectorize!
+        # for i in range(K_input):
+        #     if activity_cur[i]==1:
+        #         if i < int(K_input/2):
+        #             input_neurons[i,:]=Poisson(freq,N,T)
+        #         else:
+        #             input_neurons[i,:]=Poisson(freq2,N,T)
         input_neurons=np.zeros((K_input, N))
-        for i in range(K_input):
-            if activity_cur[i]==1:
-                if i < int(K_input/2):
-                    input_neurons[i,:]=Poisson(freq,N,T)
-                else:
-                    input_neurons[i,:]=Poisson(freq2,N,T)
+        cur_act = np.where(activity_cur == 1)[0]
+        first_split = cur_act[cur_act < (K_input // 2)]
+        second_split = cur_act[cur_act >= (K_input // 2)]
+        input_neurons[first_split,:] = Poisson(freq, T, (first_split.size, N))
+        input_neurons[second_split,:] = Poisson(freq2, T, (second_split.size, N))
 
         #simulation of the output neurons
+        ## SV: note -> harder to vectorize :( Doable?
         output_neurons=np.zeros((K_output,N))
         for i in range(K_output):
             output_neurons[i,:]= Hawkes_lin(input_neurons,W_output[i,:,m,nb])
@@ -394,29 +401,33 @@ for nb in range(Nb):
         obj_cur=L[m]
 
         #simulation of the input neurons
+        
+        # input_neurons=np.zeros((n_input, N))
+        # for i in range(n_input):
+        #     if obj_cur[i]==1:
+        #        input_neurons[i,:]=Poisson(freq,N,T)
         input_neurons=np.zeros((n_input, N))
-        for i in range(n_input):
-            if obj_cur[i]==1:
-               input_neurons[i,:]=Poisson(freq,N,T)
+        cur_act = np.where(obj_cur == 1)[0]
+        input_neurons[cur_act,:] = Poisson(freq, T, (cur_act.size, N))
                 
         #simulation of the output neurons
-        # output_neurons=np.zeros((K_output,N))
-        # for j in range(K_output):
-        #     for t in range(N):
-        #         ## SV: you should use np.clip, it's faster
-        #         # output_neurons[j,t]= stats.bernoulli.rvs(np.minimum(np.maximum(0,alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t])),1))
-        #         output_neurons[j,t]= stats.bernoulli.rvs(np.clip(alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t]),0,1))
-        probas = alpha[:, np.newaxis] + np.sum((W_output[:, :n_input, m, nb][:, :, np.newaxis] - W_output[:, n_input:, m, nb][:, :, np.newaxis]) * input_neurons, axis=1)
-        clipped_probabs = np.clip(probas, 0, 1)
-        output_neurons = stats.bernoulli.rvs(clipped_probabs)
+        output_neurons=np.zeros((K_output,N))
+        for j in range(K_output):
+            # for t in range(N):
+            #     ## SV: you should use np.clip, it's faster
+            #     # output_neurons[j,t]= stats.bernoulli.rvs(np.minimum(np.maximum(0,alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t])),1))
+            #     output_neurons[j,t]= stats.bernoulli.rvs(np.clip(alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t]),0,1))
+            probas = alpha[j] + np.sum((W_output[j, :n_input, m, nb][:, np.newaxis] - W_output[j, n_input:, m, nb][:, np.newaxis]) * input_neurons, axis=0)
+            clipped_probas = np.clip(probas, 0, 1)
+            output_neurons[j, :] = stats.bernoulli.rvs(clipped_probas)
     
         #firing rates
         # for i in range(n_input):
         #     F_input[i,m]=np.sum(input_neurons[i,:])/T 
+        F_input[:, m] = np.sum(input_neurons, axis=1) / T
     
         # for i in range(K_output):
         #     F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
-        F_input[:, m] = np.sum(input_neurons, axis=1) / T
         F_output[:, m, nb] = np.sum(output_neurons, axis=1) / T
         
         if (in_A(obj_cur) and F_output[0,m,nb] > F_output[1,m,nb]) or (in_B(obj_cur) and F_output[1,m,nb] > F_output[0,m,nb]):
@@ -451,53 +462,68 @@ for nb in range(Nb):
 # %%
 nb=0
 
-fig, axs=plt.subplots(3,3, sharex=True, sharey=True)
+## SV: Try to not unroll loop when you do not have good reason to do it
+# fig, axs=plt.subplots(3,3, sharex=True, sharey=True)
 
-axs[0,0].scatter(ind[0], F_output[0,ind[0],nb],label="$A$",s=5)
-axs[0,0].scatter(ind[0], F_output[1,ind[0],nb],label="$B$",s=5)
-axs[0,0].set_title("Blue circle")
-
-
-axs[0,1].scatter(ind[1], F_output[0,ind[1],nb],label="$A$",s=5)
-axs[0,1].scatter(ind[1], F_output[1,ind[1],nb],label="$B$",s=5)
-axs[0,1].set_title("Blue square")
+# axs[0,0].scatter(ind[0], F_output[0,ind[0],nb],label="$A$",s=5)
+# axs[0,0].scatter(ind[0], F_output[1,ind[0],nb],label="$B$",s=5)
+# axs[0,0].set_title("Blue circle")
 
 
-axs[0,2].scatter(ind[2], F_output[0,ind[2],nb],label="$A$",s=5)
-axs[0,2].scatter(ind[2], F_output[1,ind[2],nb],label="$B$",s=5)
-axs[0,2].set_title("Blue triangle")
+# axs[0,1].scatter(ind[1], F_output[0,ind[1],nb],label="$A$",s=5)
+# axs[0,1].scatter(ind[1], F_output[1,ind[1],nb],label="$B$",s=5)
+# axs[0,1].set_title("Blue square")
 
 
-axs[1,0].scatter(ind[3], F_output[0,ind[3],nb],label="$A$",s=5)
-axs[1,0].scatter(ind[3], F_output[1,ind[3],nb],label="$B$",s=5)
+# axs[0,2].scatter(ind[2], F_output[0,ind[2],nb],label="$A$",s=5)
+# axs[0,2].scatter(ind[2], F_output[1,ind[2],nb],label="$B$",s=5)
+# axs[0,2].set_title("Blue triangle")
+
+
+# axs[1,0].scatter(ind[3], F_output[0,ind[3],nb],label="$A$",s=5)
+# axs[1,0].scatter(ind[3], F_output[1,ind[3],nb],label="$B$",s=5)
+# axs[1, 0].set_ylabel("Empirical firing rates")
+# axs[1,0].set_title("Red circle")
+
+
+# axs[1,1].scatter(ind[4], F_output[0,ind[4],nb],label="$A$",s=5)
+# axs[1,1].scatter(ind[4], F_output[1,ind[4],nb],label="$B$",s=5)
+# axs[1,1].set_title("Red square")
+
+
+# axs[1,2].scatter(ind[5], F_output[0,ind[5],nb],label="$A$",s=5)
+# axs[1,2].scatter(ind[5], F_output[1,ind[5],nb],label="$B$",s=5)
+# axs[1,2].set_title("Red triangle")
+
+
+# axs[2,0].scatter(ind[6], F_output[0,ind[6],nb],label="$A$",s=5)
+# axs[2,0].scatter(ind[6], F_output[1,ind[6],nb],label="$B$",s=5)
+# axs[2,0].set_title("Gray circle")
+
+
+# axs[2,1].scatter(ind[7], F_output[0,ind[7],nb],label="$A$",s=5)
+# axs[2,1].scatter(ind[7], F_output[1,ind[7],nb],label="$B$",s=5)
+# axs[2,1].set_title("Gray square")
+# axs[2, 1].set_xlabel("m")
+
+# axs[2,2].scatter(ind[8], F_output[0,ind[8],nb],label="$A$",s=5)
+# axs[2,2].scatter(ind[8], F_output[1,ind[8],nb],label="$B$",s=5)
+# axs[2,2].set_title("Gray triangle")
+fig, axs = plt.subplots(3, 3, sharex=True, sharey=True)
+
+titles = ["Blue circle", "Blue square", "Blue triangle",
+          "Red circle", "Red square", "Red triangle",
+          "Gray circle", "Gray square", "Gray triangle"]
+
+for i in range(3):
+    for j in range(3):
+        idx = i * 3 + j
+        axs[i, j].scatter(ind[idx], F_output[0, ind[idx], nb], label="$A$", s=5)
+        axs[i, j].scatter(ind[idx], F_output[1, ind[idx], nb], label="$B$", s=5)
+        axs[i, j].set_title(titles[idx])
+
 axs[1, 0].set_ylabel("Empirical firing rates")
-axs[1,0].set_title("Red circle")
-
-
-axs[1,1].scatter(ind[4], F_output[0,ind[4],nb],label="$A$",s=5)
-axs[1,1].scatter(ind[4], F_output[1,ind[4],nb],label="$B$",s=5)
-axs[1,1].set_title("Red square")
-
-
-axs[1,2].scatter(ind[5], F_output[0,ind[5],nb],label="$A$",s=5)
-axs[1,2].scatter(ind[5], F_output[1,ind[5],nb],label="$B$",s=5)
-axs[1,2].set_title("Red triangle")
-
-
-axs[2,0].scatter(ind[6], F_output[0,ind[6],nb],label="$A$",s=5)
-axs[2,0].scatter(ind[6], F_output[1,ind[6],nb],label="$B$",s=5)
-axs[2,0].set_title("Gray circle")
-
-
-axs[2,1].scatter(ind[7], F_output[0,ind[7],nb],label="$A$",s=5)
-axs[2,1].scatter(ind[7], F_output[1,ind[7],nb],label="$B$",s=5)
-axs[2,1].set_title("Gray square")
 axs[2, 1].set_xlabel("m")
-
-axs[2,2].scatter(ind[8], F_output[0,ind[8],nb],label="$A$",s=5)
-axs[2,2].scatter(ind[8], F_output[1,ind[8],nb],label="$B$",s=5)
-axs[2,2].set_title("Gray triangle")
-
 
 plt.legend()
 fig.tight_layout()
