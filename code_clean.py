@@ -87,13 +87,14 @@ def in_A(objet):  # everything except the blue circle
 #             return i
 #         somme += p[i+1]
 #     return n-1
-def simu_dist(p, size=1):
+def simu_dist(p):
     """
-    Vectorized version of simu_dist to generate multiple indices at once.
+    Simulates a discrete probability distribution given by the vector `p`.
+    Returns an index based on the cumulative probabilities.
     """
-    u = stats.uniform.rvs(0, 1, size=size)
-    cumulative_probs = np.cumsum(p)
-    return np.searchsorted(cumulative_probs, u)
+    u = stats.uniform.rvs(0, 1)
+    cumulative_pb = np.cumsum(p)
+    return np.searchsorted(cumulative_pb, u)
 
 ## SV: try to always avoid loop. corollary: use vectorized cod
 ## SV: try to avoid variable name starting with an uppercase
@@ -104,13 +105,13 @@ def simu_dist(p, size=1):
 #     for i in range(N):
 #         P[i] = stats.bernoulli.rvs(freq*dt)
 #     return P
-def Poisson(freq, T, shape):
+def Poisson(freq, N, T):
     """
-    Simulates a Poisson process over a time `T` and intensity `freq`.
+    Simulates a Poisson process over a time `T` with `N` steps and intensity `freq`.
     Returns a numpy array representing the Poisson process.
     """
-    dt = T/shape
-    proc = stats.bernoulli.rvs(freq*dt, size=shape)
+    dt = T/N
+    proc = stats.bernoulli.rvs(freq*dt, size=N)
     return proc
 
 ## SV: dont use np.size, use V.shape instead
@@ -122,18 +123,6 @@ def Poisson(freq, T, shape):
 #         ind_v = simu_dist(W)
 #         H[i] = V[int(ind_v), i]
 #     return H
-# def Hawkes_lin(V, W):
-#     """
-#     Simulates a Hawkes process (no spontaneous rate) using the Kalikow decomposition.
-#     Given the neighbors `V` and the weights `W`, the function simulates the process 
-#     by selecting points from the neighbors based on the weights.
-#     """
-#     n = V.shape[1]  # nb of points
-#     H = np.zeros(n)  # contain points
-#     for i in range(n):
-#         ind_v = simu_dist(W)
-#         H[i] = V[int(ind_v), i]
-#     return H
 def Hawkes_lin(V, W):
     """
     Simulates a Hawkes process (no spontaneous rate) using the Kalikow decomposition.
@@ -142,8 +131,9 @@ def Hawkes_lin(V, W):
     """
     n = V.shape[1]  # nb of points
     H = np.zeros(n)  # contain points
-    ind_v = simu_dist(W, n)
-    H = V[ind_v, np.arange(n)]
+    for i in range(n):
+        ind_v = simu_dist(W)
+        H[i] = V[int(ind_v), i]
     return H
 
 def cred_output_HAN_Solo(K_output, K_input, F_input, dt,obj): #new gains
@@ -256,9 +246,9 @@ F_output=np.zeros((K_output, M,Nb)) #firing rate output neurons
 #para_PWA=2*np.log(K_input) para opti PWA for regret
 para_PWA=2
 
-## SV: use list comprehension
-#index of active neurons for each object
-activity = [o+[1-l for l in o] for o in obj]
+
+for o in obj:
+    activity.append(o+[1-l for l in o]) #index of active neurons for each object
 
 
 for nb in range(Nb):
@@ -281,47 +271,41 @@ for nb in range(Nb):
         obj_cur=activity_cur[:int(K_input/2)] #current object
 
         #simulation of the input neurons
-        ## SV: let's vectorize!
-        # for i in range(K_input):
-        #     if activity_cur[i]==1:
-        #         if i < int(K_input/2):
-        #             input_neurons[i,:]=Poisson(freq,N,T)
-        #         else:
-        #             input_neurons[i,:]=Poisson(freq2,N,T)
         input_neurons=np.zeros((K_input, N))
-        cur_act = np.where(activity_cur == 1)[0]
-        first_split = cur_act[cur_act < (K_input // 2)]
-        second_split = cur_act[cur_act >= (K_input // 2)]
-        input_neurons[first_split,:] = Poisson(freq, T, (first_split.size, N))
-        input_neurons[second_split,:] = Poisson(freq2, T, (second_split.size, N))
+        for i in range(K_input):
+            if activity_cur[i]==1:
+                if i < int(K_input/2):
+                    input_neurons[i,:]=Poisson(freq,N,T)
+                else:
+                    input_neurons[i,:]=Poisson(freq2,N,T)
 
+   
         #simulation of the output neurons
-        ## SV: note -> harder to vectorize :( Doable?
         output_neurons=np.zeros((K_output,N))
         for i in range(K_output):
             output_neurons[i,:]= Hawkes_lin(input_neurons,W_output[i,:,m,nb])
+
+        #output_neurons=np.zeros((K_output,N))
+        #for j in range(K_output):
+        #    for t in range(N):
+         #       output_neurons[j,t]= stats.bernoulli.rvs(np.sum(W_output[j,:,m,nb]*input_neurons[:,t]))
+    
     
         #firing rates
-        ## SV: vectorize
-        # for i in range(K_input):
-        #     F_input[i,m]=np.sum(input_neurons[i,:])/T 
-        F_input[:, m] = np.sum(input_neurons, axis=1) / T
+        for i in range(K_input):
+            F_input[i,m]=np.sum(input_neurons[i,:])/T 
     
-        ## SV: vectorize
-        # for i in range(K_output):
-        #     F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
-        F_output[:, m, nb] = np.sum(output_neurons, axis=1) / T
+        for i in range(K_output):
+            F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
         
         if (in_A(obj_cur) and F_output[0,m,nb] > F_output[1,m,nb]) or (in_B(obj_cur) and F_output[1,m,nb] > F_output[0,m,nb]):
             answers[nb,m]=1
     
         cred=cred_output_HAN_Solo(K_output, K_input, F_input[:,m], dt,obj_cur)
-        ## SV: vectorize
-        # for j in range(K_output):
-        #     cred_cum_input[j,:]+=cred[j,:]
-        #     cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]* cred[j,:])
-        cred_cum_input += cred
-        cred_cum_output += np.sum(W_output[:, :, m, nb] * cred, axis=1)
+        for j in range(K_output):
+            cred_cum_input[j,:]+=cred[j,:]
+            cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]* cred[j,:])
+        
 
         if m<M-1 :
             W_output_not_renorm[:,:,m+1]=EWA(W_output_not_renorm[:,:,m],eta_output,cred,K_output)
@@ -352,7 +336,7 @@ T=N*dt
 freq=100 #firing rate input neurons +
 freq2=150
 
-alpha=np.array([100*dt,0]) #spontaneous rates of output neurons
+alpha=[100*dt,0] #spontaneous rates of output neurons
 
 p=freq*dt #spiking proba input neurons
 p2=freq2*dt
@@ -401,53 +385,39 @@ for nb in range(Nb):
         obj_cur=L[m]
 
         #simulation of the input neurons
-        
-        # input_neurons=np.zeros((n_input, N))
-        # for i in range(n_input):
-        #     if obj_cur[i]==1:
-        #        input_neurons[i,:]=Poisson(freq,N,T)
         input_neurons=np.zeros((n_input, N))
-        cur_act = np.where(obj_cur == 1)[0]
-        input_neurons[cur_act,:] = Poisson(freq, T, (cur_act.size, N))
+        for i in range(n_input):
+            if obj_cur[i]==1:
+               input_neurons[i,:]=Poisson(freq,N,T)
                 
         #simulation of the output neurons
         output_neurons=np.zeros((K_output,N))
         for j in range(K_output):
-            # for t in range(N):
-            #     ## SV: you should use np.clip, it's faster
-            #     # output_neurons[j,t]= stats.bernoulli.rvs(np.minimum(np.maximum(0,alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t])),1))
-            #     output_neurons[j,t]= stats.bernoulli.rvs(np.clip(alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t]),0,1))
-            probas = alpha[j] + np.sum((W_output[j, :n_input, m, nb][:, np.newaxis] - W_output[j, n_input:, m, nb][:, np.newaxis]) * input_neurons, axis=0)
-            clipped_probas = np.clip(probas, 0, 1)
-            output_neurons[j, :] = stats.bernoulli.rvs(clipped_probas)
+            for t in range(N):
+                output_neurons[j,t]= stats.bernoulli.rvs(np.minimum(np.maximum(0,alpha[j]+np.sum((W_output[j,:n_input,m,nb] - W_output[j,n_input:,m,nb])*input_neurons[:,t])),1))
     
         #firing rates
-        # for i in range(n_input):
-        #     F_input[i,m]=np.sum(input_neurons[i,:])/T 
-        F_input[:, m] = np.sum(input_neurons, axis=1) / T
+        for i in range(n_input):
+            F_input[i,m]=np.sum(input_neurons[i,:])/T 
     
-        # for i in range(K_output):
-        #     F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
-        F_output[:, m, nb] = np.sum(output_neurons, axis=1) / T
+        for i in range(K_output):
+            F_output[i,m,nb]=np.sum(output_neurons[i,:])/T 
         
         if (in_A(obj_cur) and F_output[0,m,nb] > F_output[1,m,nb]) or (in_B(obj_cur) and F_output[1,m,nb] > F_output[0,m,nb]):
             answers[nb,m]=1
     
         cred=cred_output_HAN(K_output, K_input, F_input[:,m], dt,obj_cur)
-        # for j in range(K_output):
-        #     cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]*cred[j,:])
-        #     cred_cum_input[j,:]+=cred[j,:]
-        cred_cum_output += np.sum(W_output[:, :, m, nb] * cred, axis=1)
-        cred_cum_input += cred
+        for j in range(K_output):
+            cred_cum_output[j]+=np.sum(W_output[j,:,m,nb]*cred[j,:])
+            cred_cum_input[j,:]+=cred[j,:]
 
         if m<M-1 :
             W_output_not_renorm[:,:,m+1]=EWA(W_output_not_renorm[:,:,m],eta_output,cred,K_output)
             #W_output_not_renorm[:,:,m+1]=Multilin(W_output_not_renorm[:,:,m],eta_output,list_cred_output[:,:,m],K_output)
             #W_output_not_renorm[:,:,m+1]=PWA(para_PWA,K_output,K_input,cred_cum_output,cred_cum_input)
 
-            # for j in range(K_output):
-            #     W_output[j,:,m+1,nb]=W_output_not_renorm[j,:,m+1]/np.sum(W_output_not_renorm[j,:,m+1])
-            W_output[:, :, m+1, nb] = W_output_not_renorm[:, :, m+1] / np.sum(W_output_not_renorm[:, :, m+1], axis=1)[:, np.newaxis]
+            for j in range(K_output):
+                W_output[j,:,m+1,nb]=W_output_not_renorm[j,:,m+1]/np.sum(W_output_not_renorm[j,:,m+1])
 
         if m%100==0:
             print(nb,m)
@@ -462,68 +432,53 @@ for nb in range(Nb):
 # %%
 nb=0
 
-## SV: Try to not unroll loop when you do not have good reason to do it
-# fig, axs=plt.subplots(3,3, sharex=True, sharey=True)
+fig, axs=plt.subplots(3,3, sharex=True, sharey=True)
 
-# axs[0,0].scatter(ind[0], F_output[0,ind[0],nb],label="$A$",s=5)
-# axs[0,0].scatter(ind[0], F_output[1,ind[0],nb],label="$B$",s=5)
-# axs[0,0].set_title("Blue circle")
-
-
-# axs[0,1].scatter(ind[1], F_output[0,ind[1],nb],label="$A$",s=5)
-# axs[0,1].scatter(ind[1], F_output[1,ind[1],nb],label="$B$",s=5)
-# axs[0,1].set_title("Blue square")
+axs[0,0].scatter(ind[0], F_output[0,ind[0],nb],label="$A$",s=5)
+axs[0,0].scatter(ind[0], F_output[1,ind[0],nb],label="$B$",s=5)
+axs[0,0].set_title("Blue circle")
 
 
-# axs[0,2].scatter(ind[2], F_output[0,ind[2],nb],label="$A$",s=5)
-# axs[0,2].scatter(ind[2], F_output[1,ind[2],nb],label="$B$",s=5)
-# axs[0,2].set_title("Blue triangle")
+axs[0,1].scatter(ind[1], F_output[0,ind[1],nb],label="$A$",s=5)
+axs[0,1].scatter(ind[1], F_output[1,ind[1],nb],label="$B$",s=5)
+axs[0,1].set_title("Blue square")
 
 
-# axs[1,0].scatter(ind[3], F_output[0,ind[3],nb],label="$A$",s=5)
-# axs[1,0].scatter(ind[3], F_output[1,ind[3],nb],label="$B$",s=5)
-# axs[1, 0].set_ylabel("Empirical firing rates")
-# axs[1,0].set_title("Red circle")
+axs[0,2].scatter(ind[2], F_output[0,ind[2],nb],label="$A$",s=5)
+axs[0,2].scatter(ind[2], F_output[1,ind[2],nb],label="$B$",s=5)
+axs[0,2].set_title("Blue triangle")
 
 
-# axs[1,1].scatter(ind[4], F_output[0,ind[4],nb],label="$A$",s=5)
-# axs[1,1].scatter(ind[4], F_output[1,ind[4],nb],label="$B$",s=5)
-# axs[1,1].set_title("Red square")
-
-
-# axs[1,2].scatter(ind[5], F_output[0,ind[5],nb],label="$A$",s=5)
-# axs[1,2].scatter(ind[5], F_output[1,ind[5],nb],label="$B$",s=5)
-# axs[1,2].set_title("Red triangle")
-
-
-# axs[2,0].scatter(ind[6], F_output[0,ind[6],nb],label="$A$",s=5)
-# axs[2,0].scatter(ind[6], F_output[1,ind[6],nb],label="$B$",s=5)
-# axs[2,0].set_title("Gray circle")
-
-
-# axs[2,1].scatter(ind[7], F_output[0,ind[7],nb],label="$A$",s=5)
-# axs[2,1].scatter(ind[7], F_output[1,ind[7],nb],label="$B$",s=5)
-# axs[2,1].set_title("Gray square")
-# axs[2, 1].set_xlabel("m")
-
-# axs[2,2].scatter(ind[8], F_output[0,ind[8],nb],label="$A$",s=5)
-# axs[2,2].scatter(ind[8], F_output[1,ind[8],nb],label="$B$",s=5)
-# axs[2,2].set_title("Gray triangle")
-fig, axs = plt.subplots(3, 3, sharex=True, sharey=True)
-
-titles = ["Blue circle", "Blue square", "Blue triangle",
-          "Red circle", "Red square", "Red triangle",
-          "Gray circle", "Gray square", "Gray triangle"]
-
-for i in range(3):
-    for j in range(3):
-        idx = i * 3 + j
-        axs[i, j].scatter(ind[idx], F_output[0, ind[idx], nb], label="$A$", s=5)
-        axs[i, j].scatter(ind[idx], F_output[1, ind[idx], nb], label="$B$", s=5)
-        axs[i, j].set_title(titles[idx])
-
+axs[1,0].scatter(ind[3], F_output[0,ind[3],nb],label="$A$",s=5)
+axs[1,0].scatter(ind[3], F_output[1,ind[3],nb],label="$B$",s=5)
 axs[1, 0].set_ylabel("Empirical firing rates")
+axs[1,0].set_title("Red circle")
+
+
+axs[1,1].scatter(ind[4], F_output[0,ind[4],nb],label="$A$",s=5)
+axs[1,1].scatter(ind[4], F_output[1,ind[4],nb],label="$B$",s=5)
+axs[1,1].set_title("Red square")
+
+
+axs[1,2].scatter(ind[5], F_output[0,ind[5],nb],label="$A$",s=5)
+axs[1,2].scatter(ind[5], F_output[1,ind[5],nb],label="$B$",s=5)
+axs[1,2].set_title("Red triangle")
+
+
+axs[2,0].scatter(ind[6], F_output[0,ind[6],nb],label="$A$",s=5)
+axs[2,0].scatter(ind[6], F_output[1,ind[6],nb],label="$B$",s=5)
+axs[2,0].set_title("Gray circle")
+
+
+axs[2,1].scatter(ind[7], F_output[0,ind[7],nb],label="$A$",s=5)
+axs[2,1].scatter(ind[7], F_output[1,ind[7],nb],label="$B$",s=5)
+axs[2,1].set_title("Gray square")
 axs[2, 1].set_xlabel("m")
+
+axs[2,2].scatter(ind[8], F_output[0,ind[8],nb],label="$A$",s=5)
+axs[2,2].scatter(ind[8], F_output[1,ind[8],nb],label="$B$",s=5)
+axs[2,2].set_title("Gray triangle")
+
 
 plt.legend()
 fig.tight_layout()
@@ -550,7 +505,7 @@ paq=180
 
 level=0.1
 
-Y=np.zeros((Nb,M-paq)) # percentage "glissant" of correct guesses for a bloc of 180 objects
+Y=np.zeros((Nb,M-paq)) # percentage "glissant" of correct guesses for a bloc of 18 objects
 for nb in range(Nb):
     for m in range(M-paq):
         Y[nb,m]=np.sum(answersEWA2[nb,m:m+paq])/paq
@@ -853,5 +808,10 @@ plt.ylabel('Proportion of correction classifications')
 plt.xlabel('m')
 
 plt.legend()
-#plt.savefig('curves.pdf')
+plt.savefig('curves.pdf')
 plt.show()
+
+
+
+
+
