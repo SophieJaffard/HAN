@@ -95,6 +95,13 @@ def simu_dist(p):
     u = stats.uniform.rvs(0, 1)
     cumulative_pb = np.cumsum(p)
     return np.searchsorted(cumulative_pb, u)
+def simu_dist_vectorized(p, size=1):
+    """
+    Vectorized version of simu_dist to generate multiple indices at once.
+    """
+    u = stats.uniform.rvs(0, 1, size=size)
+    cumulative_probs = np.cumsum(p)
+    return np.searchsorted(cumulative_probs, u)
 
 ## SV: try to always avoid loop. corollary: use vectorized cod
 ## SV: try to avoid variable name starting with an uppercase
@@ -123,6 +130,18 @@ def Poisson(freq, N, T):
 #         ind_v = simu_dist(W)
 #         H[i] = V[int(ind_v), i]
 #     return H
+# def Hawkes_lin(V, W):
+#     """
+#     Simulates a Hawkes process (no spontaneous rate) using the Kalikow decomposition.
+#     Given the neighbors `V` and the weights `W`, the function simulates the process 
+#     by selecting points from the neighbors based on the weights.
+#     """
+#     n = V.shape[1]  # nb of points
+#     H = np.zeros(n)  # contain points
+#     for i in range(n):
+#         ind_v = simu_dist(W)
+#         H[i] = V[int(ind_v), i]
+#     return H
 def Hawkes_lin(V, W):
     """
     Simulates a Hawkes process (no spontaneous rate) using the Kalikow decomposition.
@@ -131,9 +150,8 @@ def Hawkes_lin(V, W):
     """
     n = V.shape[1]  # nb of points
     H = np.zeros(n)  # contain points
-    for i in range(n):
-        ind_v = simu_dist(W)
-        H[i] = V[int(ind_v), i]
+    ind_v = simu_dist_vectorized(W, n)
+    H = V[ind_v, np.arange(n)]
     return H
 
 def cred_output_HAN_Solo(K_output, K_input, F_input, dt,obj): #new gains
