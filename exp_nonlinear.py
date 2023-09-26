@@ -3,12 +3,12 @@ import scipy.stats as stats
 from hansolo import *
 
 Nb = 100
+expert = "EWA"  # "EWA" or "PWA" or "Multilin"
 
 M = 2997
 dt = 0.002
 N = 1000
 T = N * dt
-
 
 freq = 100  # firing rate input neurons +
 freq2 = 150
@@ -100,20 +100,23 @@ for nb in range(Nb):
         cred_cum_input += cred
 
         if m < M - 1:
-            W_output_not_renorm[:, :, m + 1] = EWA(
-                W_output_not_renorm[:, :, m], eta_output, cred, K_output
-            )
-            # W_output_not_renorm[:,:,m+1]=Multilin(W_output_not_renorm[:,:,m],eta_output,list_cred_output[:,:,m],K_output)
-            # W_output_not_renorm[:,:,m+1]=PWA(para_PWA,K_output,K_input,cred_cum_output,cred_cum_input)
+            if expert == "EWA":
+                W_output_not_renorm[:, :, m + 1] = EWA(
+                    W_output_not_renorm[:, :, m], eta_output, cred, K_output
+                )
+            elif expert == "Multilin":
+                W_output_not_renorm[:,:,m+1]=Multilin(W_output_not_renorm[:,:,m],eta_output,list_cred_output[:,:,m],K_output)
+            elif expert == "PWA":
+                W_output_not_renorm[:,:,m+1]=PWA(para_PWA,K_output,K_input,cred_cum_output,cred_cum_input)
 
             W_output[:, :, m + 1, nb] = (
                 W_output_not_renorm[:, :, m + 1]
                 / np.sum(W_output_not_renorm[:, :, m + 1], axis=1)[:, np.newaxis]
             )
 
-        if m % 100 == 0:
+        if m % 500 == 0:
             print(nb, m)
 
-# np.save('PWA100_inhib',answersEWA)
-# np.save('PWA100W_inhib', W_output)
-# np.save('PWA100F_inhib', F_output)
+#np.save(f"{expert}100_inhib",answersEWA)
+np.save(f"{expert}100W_inhib", W_output)
+np.save(f"{expert}100F_inhib", F_output)

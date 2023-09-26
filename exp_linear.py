@@ -5,6 +5,7 @@ from hansolo import *
 # np.random.seed(10)
 
 Nb = 100
+expert = "EWA"  # "EWA" or "PWA"
 
 M = 2997
 dt = 0.002
@@ -100,19 +101,22 @@ for nb in range(Nb):
         cred_cum_output += np.sum(W_output[:, :, m, nb] * cred, axis=1)
 
         if m < M - 1:
-            W_output_not_renorm[:, :, m + 1] = EWA(
-                W_output_not_renorm[:, :, m], eta_output, cred, K_output
-            )
-            # W_output_not_renorm[:,:,m+1]=PWA(para_PWA,K_output,K_input,cred_cum_output,cred_cum_input)
+            if expert == "EWA":
+                W_output_not_renorm[:, :, m + 1] = EWA(
+                    W_output_not_renorm[:, :, m], eta_output, cred, K_output
+                )
+            elif expert == "PWA":
+                W_output_not_renorm[:, :, m + 1] = PWA(
+                    para_PWA, K_output, K_input, cred_cum_output, cred_cum_input
+                )
 
             for j in range(K_output):
                 W_output[j, :, m + 1, nb] = W_output_not_renorm[j, :, m + 1] / np.sum(
                     W_output_not_renorm[j, :, m + 1]
                 )
 
-        if m % 100 == 0:
+        if m % 500 == 0:
             print(nb, m)
 
-# np.save('PWA100_para_opti',answersEWA)
-# np.save('PWA100W_para_opti', W_output)
-# np.save('PWA100F_para_opti', F_output)
+np.save(f"{expert}100W_para_opti", W_output)
+np.save(f"{expert}100F_para_opti", F_output)
