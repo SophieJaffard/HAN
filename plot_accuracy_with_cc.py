@@ -1,6 +1,7 @@
 ##Figure HAN et HAN Solo et CC
+## TODO: fix it
 import numpy as np
-import scipy.stats as stats
+import matplotlib.pyplot as plt
 from hansolo import *
 
 answersEWA = np.load("EWA100.npy")

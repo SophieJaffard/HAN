@@ -118,5 +118,6 @@ for nb in range(Nb):
         if m % 500 == 0:
             print(nb, m)
 
+np.save(f"{expert}100_para_opti", answers)
 np.save(f"{expert}100W_para_opti", W_output)
 np.save(f"{expert}100F_para_opti", F_output)

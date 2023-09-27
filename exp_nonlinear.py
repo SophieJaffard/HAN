@@ -117,6 +117,6 @@ for nb in range(Nb):
         if m % 500 == 0:
             print(nb, m)
 
-#np.save(f"{expert}100_inhib",answersEWA)
+np.save(f"{expert}100_inhib",answers)
 np.save(f"{expert}100W_inhib", W_output)
 np.save(f"{expert}100F_inhib", F_output)

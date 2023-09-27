@@ -1,6 +1,7 @@
 # One realisation (pas bonne légende pour les objets, à changer)
+## TODO: fix it
 import numpy as np
-import scipy.stats as stats
+import matplotlib.pyplot as plt
 from hansolo import *
 
 nb = 0
