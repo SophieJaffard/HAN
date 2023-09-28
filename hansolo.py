@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats as stats
+import matplotlib.pyplot as plt
 
 
 def objects_random(obj):
@@ -17,6 +18,22 @@ def list_obj(obj, M):
     li = [obj[i % n] for i in range(M)]
     return li, ind
 
+def list_obj_random(obj, M):
+    """
+    Create a matrix of random permutations of the input list 'obj' until it reaches
+    the shape (M, len(obj)), where each row represents a block of randomly permuted objects. 
+    Note: this function assumes that M is a multiple of n.
+    """
+    n = len(obj)
+    num_blocks = int(M / n)
+    
+    # Create an array of random permutations for each block
+    permutations = np.array([np.random.permutation(obj) for _ in range(num_blocks)])
+    
+    # Stack the permutations vertically to form the matrix
+    result_matrix = np.vstack(permutations)
+    
+    return result_matrix
 
 def list_objects_random(objects, M):
     """
@@ -26,11 +43,11 @@ def list_objects_random(objects, M):
     """
     n = len(objects)
     random_indices = np.random.randint(n, size=M)
-    L = [objects[i] for i in random_indices]
+    L = np.array([objects[i] for i in random_indices])
 
-    ind = [list(np.where(random_indices == i)[0]) for i in range(n)]
 
-    return L, ind
+
+    return L
 
 
 def in_B(obj):
