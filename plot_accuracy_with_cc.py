@@ -176,7 +176,7 @@ plt.fill_between(X2, Y_10, Y_90, color="brown", alpha=0.2)
 
 plt.yticks([0.6, 0.8, 1])
 plt.xticks([500, 1500, 3000])
-plt.ylabel("Proportion of correction classifications")
+plt.ylabel("Proportion of correct classifications")
 plt.xlabel("m")
 
 plt.legend()
